@@ -151,7 +151,7 @@ get_authors() {
 	authors=''
 	while read -r line && [ -n "$line" ]; do
 		authors+="\n$line"
-	done <<< "$(git -C "$1" log --format='%ae - "%an"' --all --clear-decorations --quiet)"
+	done <<< "$(git -C "$1" log --format='%ae - "%an"' --all --quiet)"
 	authors="$(echo -e "$authors")"
 }
 
