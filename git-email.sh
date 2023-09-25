@@ -108,9 +108,9 @@ parse_args() {
 }
 
 clean() {
-	echo -e "[${GREEN}i${NO_COLOR}] - Cleaning up..."
+	echo -e "[${BOLD_WHITE}i${NO_COLOR}] - Cleaning up..."
 	[ $KEEP_DOWNLOADS = 'false' ] && rm -rf "${TEMP_DIR:?}"
-	echo -e "${OVERWRITE}[${GREEN}✓${NO_COLOR}] - Cleaning up"
+	echo -e "${OVERWRITE}[${GREEN}+${NO_COLOR}] - Cleaning up"
 }
 
 on_error() {
@@ -236,7 +236,7 @@ scan_repo_list() {
 		total_authors+="$authors"
 		counter=$((counter + 1))
 
-		echo -ne " ${GREEN}✓${NO_COLOR}"
+		echo -ne " ${GREEN}Done${NO_COLOR}"
 	done
 }
 
