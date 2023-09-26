@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Requirements: bash 4+
 
 # Default values
 USE_FILTERS=true
@@ -12,7 +11,6 @@ KEEP_DOWNLOADS=false
 GREEN='\033[0;32m'
 BOLD_WHITE='\033[1;37m'
 NO_COLOR='\033[0m'
-OVERWRITE='\e[1A\e[K'
 
 set -o errexit   # abort on nonzero exitstatus
 set -o nounset   # abort on unbound variable
@@ -61,7 +59,7 @@ parse_args() {
 		shift
 	done
 
-	if [ -n "$TARGET" ] && [ ${#REPO_LIST[@]} -le 0 ]; then
+	if [ -n "$TARGET" ] && [ -z "$REPO_LIST" ]; then
 
 		# Check if target is a local dir
 		if [ -d "$TARGET" ]; then
@@ -73,13 +71,13 @@ parse_args() {
 			local _scan_name
 			_scan_name="${TARGET#*.*/}"
 			SCAN_NAME="${_scan_name%.git}"
-			REPO_LIST=("$TARGET")
+			REPO_LIST="$TARGET"
 
 		# Check if URI is a GitHub repo
 		elif [[ "$TARGET" =~ ^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$ ]]; then
 			if repo_exist_not_empty "https://github.com/${TARGET}"; then
 				SCAN_NAME="$TARGET"
-				REPO_LIST=("https://github.com/${TARGET}")
+				REPO_LIST="https://github.com/${TARGET}"
 			else
 				error "repository empty"
 			fi
@@ -90,7 +88,7 @@ parse_args() {
 			if gh_owner_has_repo "$TARGET"; then
 				SCAN_NAME="$TARGET"
 				get_gh_owner_repo_list "$TARGET"
-				if [ ${#REPO_LIST[@]} -le 0 ] && [ $INCLUDE_FORK = 'false' ]; then
+				if [ -z "$REPO_LIST" ] && [ $INCLUDE_FORK = 'false' ]; then
 					error 'owner has no accessible repository matching criterias'
 				fi
 			else
@@ -98,7 +96,7 @@ parse_args() {
 			fi
 		fi
 
-		if [ ${#REPO_LIST[@]} -le 0 ]; then
+		if [ -z "$REPO_LIST" ]; then
 			error "target not found or empty: $TARGET"
 		fi
 
@@ -108,9 +106,10 @@ parse_args() {
 }
 
 clean() {
-	echo -e "[${BOLD_WHITE}i${NO_COLOR}] - Cleaning up..."
-	[ $KEEP_DOWNLOADS = 'false' ] && rm -rf "${TEMP_DIR:?}"
-	echo -e "${OVERWRITE}[${GREEN}+${NO_COLOR}] - Cleaning up"
+	echo -e "\n[${GREEN}i${NO_COLOR}] - Cleaning up..."
+	if [ $KEEP_DOWNLOADS = 'false' ]; then
+		rm -rf "${TEMP_DIR:?}\n"
+	fi
 }
 
 on_error() {
@@ -163,16 +162,16 @@ clone() {
 	if [ -d "$2" ]; then
 		if [ $UPDATE = 'true' ]; then
 			echo -n ' Updating...'
-			if git -C "$2" pull --quiet &> /dev/null; then
+			if git -C "$2" pull --quiet 2> /dev/null; then
 				ret_error=0
 			else
 				echo -n ' Failed. Downloading...'
 
 				# Attempt to clone the repo in a temp dir
 				if repo_exist_not_empty "$1"; then
-					if git clone --bare --quiet "$1" "_$2"; then
+					if git clone --no-checkout --quiet "$1" "_$2" 2> /dev/null; then
 						rm -rf "${2:?}" && \
-						mv --force "_$2" "$2" && \
+						mv -f "_$2" "$2" && \
 						ret_error=0
 					else
 						error "repository out of reach: $1"
@@ -188,7 +187,7 @@ clone() {
 	else
 		echo -n ' Downloading...'
 		if repo_exist_not_empty "$1"; then
-			if git clone --bare --quiet "$1" "$2" --quiet; then
+			if git clone --no-checkout --quiet "$1" "$2"; then
 				ret_error=0
 			else
 				error "repository out of reach: $1"
@@ -206,12 +205,11 @@ clone() {
 # Output: $total_authors
 scan_repo_list() {
 	local len_repo_list counter repo clone_dir
-	local -n repo_list=$1
 	total_authors=''
-	len_repo_list="${#repo_list[@]}"
+	len_repo_list="$(wc -w <<< "$1" | tr -d ' ')"
 	counter=1
 	authors=''
-	for url in "${repo_list[@]}"; do
+	for url in $1; do
 		if [ "$url" = '*/.git' ]; then
 			repo="$(basename "${url%%/.git}")"
 		else
@@ -221,8 +219,9 @@ scan_repo_list() {
 		echo -ne "\n[${GREEN}${counter}/${len_repo_list}${NO_COLOR}] - ${BOLD_WHITE}${repo}${NO_COLOR}:"
 
 		# If no download then no temp dir is required
-		if [ "${url%://*}" = 'file' ] && [ ! $UPDATE = 'true' ]; then
+		if [ "${url%://*}" = 'file' ]; then
 			clone_dir="${url#*://}"
+			[ $UPDATE = 'true' ] && clone "$url" "${clone_dir%.git}"
 		else
 			clone_dir="${TEMP_DIR}/${repo}"
 			clone "$url" "$clone_dir"
@@ -259,7 +258,7 @@ output_results() {
 			output+="$1"
 			echo -e "$output" > "${OUTPUT_FILE:?}"
 		else
-			echo -e "\n${1}\n"
+			echo -e "\n${1}"
 		fi
 	fi
 }
@@ -275,7 +274,7 @@ get_repo_list_local() {
 		while read -r git_path; do
 			git_path_absolute="$(realpath "${git_path%%/description}")"
 			if repo_exist_not_empty "$git_path_absolute"; then
-				REPO_LIST+=("file://${git_path_absolute}")
+				REPO_LIST+="file://${git_path_absolute} "
 			else
 				error "directory is not a Git repository: $(basename "$git_path_absolute")"
 			fi
@@ -297,7 +296,7 @@ get_gh_owner_repo_list() {
 	fi
 
 	while read -r repo_url && [ -n "$repo_url" ]; do
-		REPO_LIST+=("$repo_url")
+		REPO_LIST+="$repo_url "
 	done <<< "$(gh api "$owner_type/$1/repos" --paginate --jq ".[] | select(.fork == false or $INCLUDE_FORK) | select(.private == false or $INCLUDE_PRIVATE) | .clone_url")"
 }
 
@@ -357,7 +356,7 @@ filter() {
 }
 
 # Parse arguments
-REPO_LIST=()
+REPO_LIST=''
 parse_args "$@"
 
 # Handle download dir
@@ -365,18 +364,17 @@ if [ $KEEP_DOWNLOADS = 'true' ]; then
 	TEMP_DIR="$SCAN_NAME"
 	[ ! -d "$TEMP_DIR" ] && mkdir -p "${TEMP_DIR:?}"
 else
-	TEMP_DIR="$(mktemp --directory --quiet --suffix=.git-email)"
+	TEMP_DIR="$(mktemp -d -q)"
 fi
 
-echo -e '\n---------------------------------------\n'
+echo -e '---------------------------------------\n'
 echo -e "Starting scan of ${BOLD_WHITE}${SCAN_NAME}${NO_COLOR}"
 echo -e '\n---------------------------------------'
 
 # Handle errors and exit
 trap on_error ERR INT
 
-scan_repo_list REPO_LIST
+scan_repo_list "$REPO_LIST"
 filter "$total_authors"
 output_results "$filtered_list"
 clean
-echo
