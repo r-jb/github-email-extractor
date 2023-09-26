@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/r-jb/github-email-extractor/media/showcase.webp" alt="GitHub Email Extractor"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/r-jb/github-email-extractor/media/showcase.webp" alt="GitHub Email Extractor" height="500"></p>
 
 # GitHub Email Extractor
 
