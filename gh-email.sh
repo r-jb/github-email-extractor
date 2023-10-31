@@ -241,7 +241,7 @@ scan_repo_list() {
 
 # Usage: output_results AUTHORS
 output_results() {
-	local author_count output
+	local author_count
 	author_count="$(wc -l <<< "$1")"
 
 	if [ "$author_count" -le '1' ]; then
@@ -249,14 +249,7 @@ output_results() {
 	else
 		if [ -n "$OUTPUT_FILE" ]; then
 			echo -ne "\n[${GREEN}i${NO_COLOR}] - Saving to ${BOLD_WHITE}${OUTPUT_FILE}${NO_COLOR}...\n"
-			output=''
-			if [ "$USE_FILTERS" = 'true' ]; then
-				output+='---------------------------------------\n\n'
-				output+="Scan of ${SCAN_NAME}\n"
-				output+='\n---------------------------------------\n\n'
-			fi
-			output+="$1"
-			echo -e "$output" > "${OUTPUT_FILE:?}"
+			echo -e "$1" > "${OUTPUT_FILE:?}"
 		else
 			echo -e "\n${1}"
 		fi
