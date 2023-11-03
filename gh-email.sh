@@ -9,6 +9,7 @@ UPDATE=false
 KEEP_DOWNLOADS=false
 
 GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
 BOLD_WHITE='\033[1;37m'
 NO_COLOR='\033[0m'
 
@@ -38,7 +39,7 @@ error() {
 }
 
 parse_args() {
-	read -r OWNER SCAN_NAME USER_FILTERS OUTPUT_FILE TARGET <<< ''
+	read -r SCAN_NAME USER_FILTERS OUTPUT_FILE TARGET <<< ''
 	while (( "$#" )); do
 		case "$1" in
 			--help|-h) usage; exit;;
@@ -52,7 +53,7 @@ parse_args() {
 			--exclude-private ) INCLUDE_PRIVATE=false;;
 			--keep |-k ) KEEP_DOWNLOADS=true;;
 			--update |-u ) UPDATE=true;;
-			--no-color ) read -r NO_COLOR BOLD_WHITE GREEN <<< '';;
+			--no-color ) read -r NO_COLOR BOLD_WHITE YELLOW <<< '';;
 			*)
 				TARGET="$1"
 		esac
@@ -124,12 +125,12 @@ repo_exist_not_empty() {
 }
 
 gh_owner_exist() {
-	gh api "users/$1" --silent 2> /dev/null
+	gh api "users/$1" --silent >/dev/null 2>&1
 	return $?
 }
 
 gh_owner_has_repo(){
-	if [ "$(gh api "users/$1" --jq '.public_repos')" -gt 0 ]; then
+	if [ "$(gh api "users/$1" --jq '.public_repos' 2> /dev/null)" -gt 0 ]; then
 		return 0
 	else
 		return 1
@@ -137,7 +138,7 @@ gh_owner_has_repo(){
 }
 
 is_gh_fork() {
-	if [ "$(gh repo view "$1" --json isFork --jq '.isFork')" = 'true' ]; then
+	if [ "$(gh repo view "$1" --json isFork --jq '.isFork' 2> /dev/null)" = 'true' ]; then
 		return 0
 	else
 		return 1
@@ -146,12 +147,12 @@ is_gh_fork() {
 
 # Usage: get_email DIR
 # Output: $authors
-get_authors() {
-	authors=''
-	while read -r line && [ -n "$line" ]; do
-		authors+="\n$line"
-	done <<< "$(git -C "$1" log --format='%ae - "%an"' --all --quiet)"
-	authors="$(echo -e "$authors")"
+get_authors_csv() {
+	authors='\n'
+    while read -r line && [ -n "$line" ]; do
+        authors+="$line\n"
+    done <<< "$(git -C "$1" log --format='%ae, "%an"' --all --quiet)"
+    authors="$(echo -e "$authors")"
 }
 
 # Usage: clone REPO_URL DESTINATION_DIR
@@ -204,8 +205,8 @@ clone() {
 # Usage: scan_repo_list REPO_ARRAY
 # Output: $total_authors
 scan_repo_list() {
-	local len_repo_list counter repo clone_dir
-	total_authors=''
+	local len_repo_list counter clone_dir
+	read -r total_authors repo <<< ''
 	len_repo_list="$(wc -w <<< "$1" | tr -d ' ')"
 	counter=1
 	authors=''
@@ -229,7 +230,7 @@ scan_repo_list() {
 
 		if [ -d "$clone_dir" ]; then
 			echo -n ' Parsing...'
-			get_authors "$clone_dir"
+			get_authors_csv "$clone_dir"
 		fi
 
 		total_authors+="$authors"
@@ -249,7 +250,7 @@ output_results() {
 	else
 		if [ -n "$OUTPUT_FILE" ]; then
 			echo -ne "\n[${GREEN}i${NO_COLOR}] - Saving to ${BOLD_WHITE}${OUTPUT_FILE}${NO_COLOR}...\n"
-			echo -e "$1" > "${OUTPUT_FILE:?}"
+			echo -e "email, names\n$1" > "${OUTPUT_FILE:?}"
 		else
 			echo -e "\n${1}"
 		fi
@@ -312,37 +313,19 @@ filter() {
 
 	# Remove names
 	if [ $INCLUDE_NAME != 'true' ]; then
-		filtered_list="$(awk '{print $1}' <<< "$filtered_list")"
+		filtered_list="$(awk -F, '{print $1}' <<< "$filtered_list")"
 	fi
 
 	# Apply filters
 	filtered_list="$(grep -Fve $FILTERS <<< "$filtered_list")"
 
-	# Check emails from forked repos
-	if [ $INCLUDE_FORK = 'true' ] && [ -n "$OWNER" ] && is_gh_fork "$OWNER/$repo"; then
-		filtered_list="$(awk '{print $0, "(fork)"}' <<< "$filtered_list")"
+	# Add "(fork)" to authors from forked repos
+	if INCLUDE_FORK=true && is_gh_fork "$TARGET/$repo"; then
+		authors="$(awk '{print "('"$YELLOW"'fork'"$NO_COLOR"')", $0}' <<< "$authors")"
 	fi
 
 	# Concatenate authors with the same email address
-	filtered_list=$(awk '{
-		first_word=$1;
-		second_word=$2;
-
-		if (!(first_word in lines)) {
-			lines[first_word] = $0
-		} else {
-			sub(first_word, "", $0);
-			if (second_word == "-") {
-				sub(" " second_word " ", "", $0)
-			}
-			lines[first_word] = lines[first_word] " | " $0
-		}
-	}
-	END {
-		for (word in lines) {
-			print lines[word]
-		}
-	}' <<< "$filtered_list")
+	filtered_list="$(awk -F', ' 'NF>1{if ($1 == "") $1 = "('"$YELLOW"'No Email'"$NO_COLOR"')"; if ($2 == "") $2 = "('"$YELLOW"'No Name'"$NO_COLOR"')"; a[$1]=a[$1]" "$2} END {for(i in a) print i","a[i]}' <<< "$filtered_list")"
 
 	# Sort unique lines
 	filtered_list="$(sort --unique --ignore-case <<< "$filtered_list")"
