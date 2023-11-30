@@ -200,7 +200,7 @@ get_authors_csv() {
 	authors='\n'
     while read -r line && [ -n "$line" ]; do
         authors+="$line\n"
-    done <<< "$(git -C "$1" log --format='%ae, "%an"' --all --quiet)"
+    done <<< "$(git -C "$1" log --format='%ae,"%an"' --all --quiet)"
     authors="$(echo -e "$authors")"
 }
 
@@ -298,7 +298,7 @@ output_results() {
 		echo -e "\n[${GREEN}i${NO_COLOR}] - No email matching criterias found."
 	else
 		if [ -n "$OUTPUT_FILE" ]; then
-			echo -e "email, names\n$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" > "${OUTPUT_FILE:?}"
+			echo -e "email,names\n$1" | sed -r "s/\x1B\[([0-9]{1,2}(;[0-9]{1,2})?)?[mGK]//g" > "${OUTPUT_FILE:?}"
 			echo -e "\n[${GREEN}i${NO_COLOR}] - Results saved to ${BOLD_WHITE}${OUTPUT_FILE}${NO_COLOR}"
 		else
 			echo -e "\n\n${1}"
@@ -370,11 +370,11 @@ filter() {
 
 	# Add "(fork)" to authors from forked repos
 	if INCLUDE_FORK=true && is_gh_fork "$TARGET/$repo"; then
-		authors="$(awk '{print "('"$YELLOW"'fork'"$NO_COLOR"')", $0}' <<< "$authors")"
+		authors="$(awk '{print "('"$YELLOW"'fork'"$NO_COLOR"')",$0}' <<< "$authors")"
 	fi
 
 	# Concatenate authors with the same email address
-	filtered_list="$(awk -F', ' 'NF>1{if ($1 == "") $1 = "('"$YELLOW"'No Email'"$NO_COLOR"')"; if ($2 == "") $2 = "('"$YELLOW"'No Name'"$NO_COLOR"')"; a[$1]=a[$1]" "$2} END {for(i in a) print i","a[i]}' <<< "$filtered_list")"
+	filtered_list="$(awk -F, 'NF>1{if ($1 == "") $1 = "('"$YELLOW"'No Email'"$NO_COLOR"')"; if ($2 == "") $2 = "('"$YELLOW"'No Name'"$NO_COLOR"')"; a[$1]=a[$1]""$2" "} END {for(i in a) print i","a[i]}' <<< "$filtered_list")"
 
 	# Sort unique lines
 	filtered_list="$(sort --unique --ignore-case <<< "$filtered_list")"
