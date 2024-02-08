@@ -108,9 +108,9 @@ target_to_repo_list() {
 
 	# Check if URI is a GitHub repo
 	elif [[ "$target" =~ ^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$ ]]; then
-		if repo_exist_not_empty "https://github.com/${target}"; then
+		if repo_exist_not_empty "https://${GH_HOST:-github.com}/${target}"; then
 			SCAN_NAME="$target"
-			REPO_LIST="https://github.com/${target}"
+			REPO_LIST="https://${GH_HOST:-github.com}/${target}"
 		else
 			error "repository empty"
 		fi
